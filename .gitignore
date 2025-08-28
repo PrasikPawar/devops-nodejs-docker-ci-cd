@@ -1,0 +1,5 @@
+echo ".terraform/
+*.tfstate
+*.tfstate.backup
+.terraform.lock.hcl
+node_modules/" > .gitignore
