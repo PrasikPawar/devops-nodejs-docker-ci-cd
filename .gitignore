@@ -1,5 +1,6 @@
-echo ".terraform/
+# Terraform
 *.tfstate
 *.tfstate.backup
+.terraform/
 .terraform.lock.hcl
-node_modules/" > .gitignore
+crash.log
