@@ -1,0 +1,78 @@
+# azure-pipelines.yml
+
+# Trigger the pipeline on any commit to the 'main' branch
+trigger:
+- main
+
+# Use a variable group to store sensitive information like service connection names
+# You can create this in the Azure DevOps UI under Pipelines > Library
+variables:
+  # --- UPDATE THESE IN AZURE DEVOPS LIBRARY ---
+  # azureSubscription: 'Your-Azure-Subscription-Service-Connection'
+  # acrConnection: 'Your-ACR-Service-Connection'
+
+  # --- CONFIGURATION VARIABLES ---
+  resourceGroup: 'WebAppProject-Prod-RG'
+  acrName: 'myprodacr98765'          # Must match the name from your modules.tf
+  webAppName: 'myprod-webapp-98765'   # Must match the name from your modules.tf
+  imageRepository: 'node-app'         # The name for your image in ACR
+
+  # --- SYSTEM VARIABLES ---
+  vmImageName: 'ubuntu-latest'
+  dockerfilePath: '$(Build.SourcesDirectory)/app/Dockerfile' # Path to your Dockerfile
+  tag: '$(Build.BuildId)' # Use the unique build ID for the image tag
+
+stages:
+#-------------------------------------------------------------------
+# BUILD STAGE
+# This stage builds, tests, and pushes the Docker image.
+#-------------------------------------------------------------------
+- stage: Build
+  displayName: 'Build and Push Docker Image'
+  jobs:
+  - job: Build
+    displayName: 'Build, Test, and Push'
+    pool:
+      vmImage: $(vmImageName)
+    steps:
+    - task: Npm@1
+      displayName: 'Run npm install & test'
+      inputs:
+        command: 'ci'
+        workingDir: '$(Build.SourcesDirectory)/app' # Path to your Node.js app
+
+    - task: Docker@2
+      displayName: 'Build and Push image to ACR'
+      inputs:
+        command: 'buildAndPush'
+        # This uses the service connection you create in Azure DevOps Project Settings
+        containerRegistry: $(acrConnection)
+        repository: $(imageRepository)
+        dockerfile: $(dockerfilePath)
+        tags: |
+          $(tag)
+          latest
+
+#-------------------------------------------------------------------
+# DEPLOY STAGE
+# This stage deploys the new container image to the App Service.
+#-------------------------------------------------------------------
+- stage: Deploy
+  displayName: 'Deploy to Azure App Service'
+  dependsOn: Build
+  condition: succeeded() # Only run if the Build stage succeeds
+  jobs:
+  - job: DeployWebApp
+    displayName: 'Deploy Web App for Containers'
+    pool:
+      vmImage: $(vmImageName)
+    steps:
+    - task: AzureWebAppContainer@1
+      displayName: 'Deploy to Azure App Service'
+      inputs:
+        # This uses the service connection for your Azure Subscription
+        azureSubscription: $(azureSubscription)
+        appName: $(webAppName)
+        containerRegistry: '$(acrName).azurecr.io'
+        repository: $(imageRepository)
+        tag: '$(tag)'
